@@ -12,6 +12,12 @@ const NoteCard = ({ note , onUpdate, onDelete}) => {
     const [selectedFriends, setSelectedFriends] = useState([]);
 
     useEffect(() => {
+        // Update local state when note changes
+        setEditedTitle(note.title);
+        setEditedContent(note.content);
+    }, [note]);
+
+    useEffect(() => {
         const fetchFriends = async () => {
             const user = auth.currentUser;
             if (user) {
@@ -164,11 +170,11 @@ const NoteCard = ({ note , onUpdate, onDelete}) => {
 
     return (
         <div
-            className={`note-card ${isExpanded ? 'expanded' : ''} ${note.isShared ? 'shared' : ''}`}
+            className={`note-card ${isExpanded ? 'expanded' : ''} ${note.isShared || note.sharedWith?.length > 0 ? 'shared' : ''}`}
             style={{ backgroundColor: note.color }}
             onClick={handleExpand}
         >
-            { note.isShared && <div className="shared-indicator">Shared</div>}
+            {(note.isShared || note.sharedWith?.length > 0) && <div className="shared-indicator">Shared</div>}
 
             {isExpanded && (
                 <button className="close-button" onClick={handleClose}>×</button>

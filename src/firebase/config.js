@@ -3,9 +3,9 @@ import { getAuth } from 'firebase/auth';
 import { getFirestore } from 'firebase/firestore';
 
 const firebaseConfig = {
-    apiKey: "AIzaSyB8s-gpyo4FzWZkT6Qq2ZgLo4V4TPQyPr4",
-    authDomain: "notenshare.firebaseapp.com",
-    projectId: "notenshare",
+    apiKey: process.env.REACT_APP_FIREBASE_API_KEY,
+    authDomain: process.env.REACT_APP_FIREBASE_AUTH_DOMAIN,
+    projectId: process.env.REACT_APP_FIREBASE_PROJECT_ID,
     storageBucket: "notenshare.appspot.com",
     messagingSenderId: "558411438708",
     appId: "1:558411438708:web:93b49051f13565108c8f21"
