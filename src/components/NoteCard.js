@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { db, auth } from '../firebase/config';
-import { doc, updateDoc,getDoc, deleteDoc, collection, query, where, getDocs , arrayRemove, writeBatch, arrayUnion, serverTimestamp } from 'firebase/firestore';
+import { doc, updateDoc, deleteDoc, collection, query, where, getDocs , arrayRemove, writeBatch, serverTimestamp } from 'firebase/firestore';
 
 const NoteCard = ({ note , onUpdate, onDelete}) => {
     const [isExpanded, setIsExpanded] = useState(false);

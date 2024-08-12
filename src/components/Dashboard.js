@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { db, auth } from '../firebase/config';
-import { collection, query, onSnapshot, orderBy , getDocs, getDoc, where, doc} from 'firebase/firestore';
+import { collection, query, onSnapshot, orderBy } from 'firebase/firestore';
 import AddNotePopup from './AddNotePopup';
 import NoteCard from './NoteCard';
 import FriendsButton from './FriendsButton';
