@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { db, auth } from '../firebase/config';
-import { doc, updateDoc, deleteDoc, collection, query, where, getDocs , arrayRemove, writeBatch, arrayUnion, serverTimestamp } from 'firebase/firestore';
+import { doc, updateDoc,getDoc, deleteDoc, collection, query, where, getDocs , arrayRemove, writeBatch, arrayUnion, serverTimestamp } from 'firebase/firestore';
 
 const NoteCard = ({ note , onUpdate, onDelete}) => {
     const [isExpanded, setIsExpanded] = useState(false);
@@ -26,6 +26,7 @@ const NoteCard = ({ note , onUpdate, onDelete}) => {
         };
         fetchFriends();
     }, []);
+
     const handleExpand = () => {
         if (!isExpanded) {
             setIsExpanded(!isExpanded);
@@ -38,7 +39,9 @@ const NoteCard = ({ note , onUpdate, onDelete}) => {
         setIsEditing(false);
     };
 
+
     const handleEdit = async (e) => {
+
         e.stopPropagation();
         if (isEditing) {
             try {
@@ -50,31 +53,23 @@ const NoteCard = ({ note , onUpdate, onDelete}) => {
                     lastEditedAt: serverTimestamp(),
                 };
 
-                const currentUser = auth.currentUser;
-                const isOwner = currentUser.uid === note.originalOwnerId;
+                // Update the original note
+                const originalNoteRef = doc(db, `users/${note.originalOwnerId || auth.currentUser.uid}/notes`, note.originalNoteId || note.id);
+                batch.update(originalNoteRef, updatedNote);
 
-                // Update the note for the current user
-                const currentUserNoteRef = doc(db, `users/${currentUser.uid}/notes`, note.id);
-                batch.update(currentUserNoteRef, updatedNote);
-
-                if (note.isShared && !isOwner) {
-                    const originalNoteRef = doc(db, `users/${note.originalOwnerId}/notes`, note.originalNoteId);
-                    batch.update(originalNoteRef, updatedNote);
-                }
-
-                // Update for other shared users
-                if (note.sharedWith) {
+                // If this is a shared note, update all shared copies
+                if (note.sharedWith && note.sharedWith.length > 0) {
                     for (const userId of note.sharedWith) {
-                        if (userId !== currentUser.uid) {
-                            const sharedUserNoteRef = doc(db, `users/${userId}/notes`, isOwner ? note.id : note.originalNoteId);
-                            batch.update(sharedUserNoteRef, updatedNote);
-                        }
+                        const sharedNoteRef = doc(db, `users/${userId}/notes`, note.id);
+                        batch.update(sharedNoteRef, updatedNote);
                     }
                 }
 
                 await batch.commit();
                 setIsEditing(false);
                 onUpdate(updatedNote);
+                console.log('Updated note:', updatedNote);
+
             } catch (error) {
                 console.error("Error updating note:", error);
                 alert("Failed to update note. Please try again.");
@@ -88,7 +83,29 @@ const NoteCard = ({ note , onUpdate, onDelete}) => {
         e.stopPropagation();
         if (window.confirm("Are you sure you want to delete this note?")) {
             try {
-                await deleteDoc(doc(db, `users/${auth.currentUser.uid}/notes`, note.id));
+                if (note.isOwner) {
+                    // Delete the note and all shared instances
+                    const batch = writeBatch(db);
+                    batch.delete(doc(db, `users/${auth.currentUser.uid}/notes`, note.id));
+
+                    if (note.sharedWith && note.sharedWith.length > 0) {
+                        for (const userId of note.sharedWith) {
+                            const sharedNoteRef = doc(db, `users/${userId}/notes`, note.id);
+                            batch.delete(sharedNoteRef);
+                        }
+                    }
+
+                    await batch.commit();
+                } else {
+                    // Remove the shared note from the current user's collection
+                    await deleteDoc(doc(db, `users/${auth.currentUser.uid}/notes`, note.id));
+
+                    // Remove the current user from the sharedWith array of the original note
+                    const originalNoteRef = doc(db, `users/${note.originalOwnerId}/notes`, note.originalNoteId);
+                    await updateDoc(originalNoteRef, {
+                        sharedWith: arrayRemove(auth.currentUser.uid)
+                    });
+                }
                 onDelete(note.id);
             } catch (error) {
                 console.error("Error deleting note:", error);
@@ -108,40 +125,40 @@ const NoteCard = ({ note , onUpdate, onDelete}) => {
             try {
                 const batch = writeBatch(db);
 
-                // Update the original note to mark it as shared
+                const updatedNote = {
+                    ...note,
+                    sharedWith: [...new Set([...(note.sharedWith || []), ...selectedFriends.map(friend => friend.userId)])],
+                    isShared: true
+                };
+
+                // Update the original note
                 const originalNoteRef = doc(db, `users/${user.uid}/notes`, note.id);
-                batch.update(originalNoteRef, {
-                    sharedWith: arrayUnion(...selectedFriends.map(friend => friend.userId))
-                });
+                batch.update(originalNoteRef, updatedNote);
 
                 // Add the note to each friend's notes collection
                 for (const friend of selectedFriends) {
-                    const friendNoteRef = doc(collection(db, `users/${friend.userId}/notes`));
+                    const friendNoteRef = doc(db, `users/${friend.userId}/notes`, note.id);
                     const sharedNoteData = {
-                        ...note,
-                        id: friendNoteRef.id,
+                        ...updatedNote,
                         originalNoteId: note.id,
                         originalOwnerId: user.uid,
                         sharedAt: serverTimestamp(),
-                        isShared: true,
-                        sharedWith: [friend.userId]
+                        isOwner: false
                     };
-                    delete sharedNoteData.createdAt; // Remove the original createdAt field
                     batch.set(friendNoteRef, sharedNoteData);
                 }
 
                 await batch.commit();
-
-                console.log(`Note shared successfully with ${selectedFriends.length} friend(s)`);
                 alert(`Note shared with ${selectedFriends.length} friend(s)`);
                 setSelectedFriends([]);
+                onUpdate(updatedNote);
+                console.log('Updated note:', updatedNote);
             } catch (error) {
                 console.error("Error sharing note:", error);
                 alert("Failed to share note. Please try again.");
             }
         }
     };
-
 
     const contentPreview = note.content.split('\n').slice(0, 2).join('\n');
 
@@ -151,7 +168,7 @@ const NoteCard = ({ note , onUpdate, onDelete}) => {
             style={{ backgroundColor: note.color }}
             onClick={handleExpand}
         >
-            {note.isShared && <div className="shared-indicator">Shared</div>}
+            { note.isShared && <div className="shared-indicator">Shared</div>}
 
             {isExpanded && (
                 <button className="close-button" onClick={handleClose}>×</button>

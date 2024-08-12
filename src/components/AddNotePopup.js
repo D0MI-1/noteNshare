@@ -1,8 +1,9 @@
 import React, { useState } from 'react';
 import { db, auth } from '../firebase/config';
-import { collection, addDoc } from 'firebase/firestore';
+import { collection, addDoc, serverTimestamp, updateDoc  } from 'firebase/firestore';
 
 const colors = ['#F9D949', '#9FBB73', '#F5A7A7', '#B47BCD', '#7AD7F0', '#B4B4B3', '#586F7C'];
+
 
 const AddNotePopup = ({ onClose }) => {
     const [title, setTitle] = useState('');
@@ -14,13 +15,23 @@ const AddNotePopup = ({ onClose }) => {
         const user = auth.currentUser;
         if (user) {
             try {
-                await addDoc(collection(db, `users/${user.uid}/notes`), {
+                const docRef = await addDoc(collection(db, `users/${user.uid}/notes`), {
                     userId: user.uid,
                     title,
                     content,
                     color,
-                    createdAt: new Date()
+                    createdAt: serverTimestamp(),
+                    lastEditedAt: serverTimestamp(),
+                    isShared: false,
+                    sharedWith: [],
+                    isOwner: true,
+                    originalOwnerId: user.uid,
+                    originalNoteId: null
                 });
+
+                // Update the document with its own ID as originalNoteId
+                await updateDoc(docRef, { originalNoteId: docRef.id });
+
                 onClose();
             } catch (error) {
                 console.error('Error adding note:', error);

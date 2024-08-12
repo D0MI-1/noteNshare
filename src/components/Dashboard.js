@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { db, auth } from '../firebase/config';
-import { collection, query, onSnapshot, orderBy , getDocs, getDoc, where} from 'firebase/firestore';
+import { collection, query, onSnapshot, orderBy , getDocs, getDoc, where, doc} from 'firebase/firestore';
 import AddNotePopup from './AddNotePopup';
 import NoteCard from './NoteCard';
 import FriendsButton from './FriendsButton';
@@ -15,50 +15,34 @@ const Dashboard = () => {
     useEffect(() => {
         const user = auth.currentUser;
         if (user) {
-            // Fetch user's own notes
-            const userNotesQuery = query(
+            const notesQuery = query(
                 collection(db, `users/${user.uid}/notes`),
-                orderBy('createdAt', sortOrder)
+                orderBy('lastEditedAt', sortOrder)
             );
-            const unsubscribeUserNotes = onSnapshot(userNotesQuery, (snapshot) => {
-                const userNotes = snapshot.docs.map(doc => ({
-                    id: doc.id,
-                    ...doc.data(),
-                    isOwner: true
-                }));
-                setNotes(prevNotes => {
-                    const sharedNotes = prevNotes.filter(note => !note.isOwner);
-                    return [...sharedNotes, ...userNotes];
+
+            const unsubscribe = onSnapshot(notesQuery, (snapshot) => {
+                const fetchedNotes = snapshot.docs.map(doc => {
+                    const data = doc.data();
+                    return {
+                        id: doc.id,
+                        ...data,
+                        isOwner: data.originalOwnerId === user.uid,
+                        isShared: data.sharedWith && data.sharedWith.length > 0
+                    };
                 });
+                console.log('Fetched notes:', fetchedNotes);
+                setNotes(fetchedNotes);
             });
 
-            // Fetch shared notes
-            const sharedNotesQuery = query(
-                collection(db, `users/${user.uid}/notes`),
-                where('sharedWith', 'array-contains', user.uid)
-            );
-            const unsubscribeSharedNotes = onSnapshot(sharedNotesQuery, (snapshot) => {
-                const sharedNotes = snapshot.docs.map(doc => ({
-                    id: doc.id,
-                    ...doc.data(),
-                    isOwner: false
-                }));
-                setNotes(prevNotes => {
-                    const userNotes = prevNotes.filter(note => note.isOwner);
-                    return [...userNotes, ...sharedNotes];
-                });
-            });
-
-            return () => {
-                unsubscribeUserNotes();
-                unsubscribeSharedNotes();
-            };
+            return () => unsubscribe();
         }
     }, [sortOrder]);
 
     const handleNoteUpdate = (updatedNote) => {
+        console.log('Updating note in Dashboard:', updatedNote);
+
         setNotes(prevNotes => prevNotes.map(note =>
-            note.id === updatedNote.id ? updatedNote : note
+            note.id === updatedNote.id ? { ...note, ...updatedNote } : note
         ));
     };
 
@@ -81,8 +65,10 @@ const Dashboard = () => {
             <div className="notes-container">
                 {notes.map(note => (
                     <NoteCard
-                        key={`${note.id}-${note.isShared ? 'shared' : 'own'}`}
-                        note={note}
+                        key={`${note.id}-${note.isOwner ? 'own' : 'shared'}`}
+                        note={{...note,
+                            isShared: !note.isOwner
+                        }}
                         onUpdate={handleNoteUpdate}
                         onDelete={handleNoteDelete}
                         isExpanded={expandedNoteId === note.id}
