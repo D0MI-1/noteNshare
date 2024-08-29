@@ -38,12 +38,13 @@ const Login = () => {
                 />
                 <button type="submit" className="login-button">Login</button>
             </form>
-            <button className="forgot-password-button" onClick={() => navigate('/forgot-password')}>
-                Forgot password?
-            </button>
             <Link to="/signup">
                 <button className="signup-button">sign up</button>
             </Link>
+            <Link to="/forgot-password" className="forgot-password-link">
+                Forgot password?
+            </Link>
+
         </div>
     );
 };
